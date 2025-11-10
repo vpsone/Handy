@@ -28,6 +28,10 @@ on:
         required: false
         type: boolean
         default: false
+      sign-binaries:
+        required: false
+        type: boolean
+        default: false
       repository:
         required: false
         type: string
