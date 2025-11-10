@@ -21,9 +21,9 @@ on:
         type: string
         default: "handy"
       upload-artifacts:
-        required: false
+        required: true
         type: boolean
-        default: false
+        default: true
       sign-binaries:
         required: false
         type: boolean
