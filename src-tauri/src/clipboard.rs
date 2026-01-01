@@ -59,7 +59,7 @@ fn paste_via_clipboard(
 #[cfg(target_os = "linux")]
 fn try_send_key_combo_linux(paste_method: &PasteMethod) -> Result<bool, String> {
     if is_wayland() {
-        // Wayland: prefer wtype, then dotool
+        // Wayland: prefer wtype, then dotool, then ydotool
         if is_wtype_available() {
             info!("Using wtype for key combo");
             send_key_combo_via_wtype(paste_method)?;
@@ -68,6 +68,11 @@ fn try_send_key_combo_linux(paste_method: &PasteMethod) -> Result<bool, String> 
         if is_dotool_available() {
             info!("Using dotool for key combo");
             send_key_combo_via_dotool(paste_method)?;
+            return Ok(true);
+        }
+        if is_ydotool_available() {
+            info!("Using ydotool for key combo");
+            send_key_combo_via_ydotool(paste_method)?;
             return Ok(true);
         }
     } else {
@@ -87,7 +92,7 @@ fn try_send_key_combo_linux(paste_method: &PasteMethod) -> Result<bool, String> 
 #[cfg(target_os = "linux")]
 fn try_direct_typing_linux(text: &str) -> Result<bool, String> {
     if is_wayland() {
-        // Wayland: prefer wtype, then dotool
+        // Wayland: prefer wtype, then dotool, then ydotool
         if is_wtype_available() {
             info!("Using wtype for direct text input");
             type_text_via_wtype(text)?;
@@ -96,6 +101,11 @@ fn try_direct_typing_linux(text: &str) -> Result<bool, String> {
         if is_dotool_available() {
             info!("Using dotool for direct text input");
             type_text_via_dotool(text)?;
+            return Ok(true);
+        }
+        if is_ydotool_available() {
+            info!("Using ydotool for direct text input");
+            type_text_via_ydotool(text)?;
             return Ok(true);
         }
     } else {
@@ -125,6 +135,16 @@ fn is_wtype_available() -> bool {
 fn is_dotool_available() -> bool {
     Command::new("which")
         .arg("dotool")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Check if ydotool is available (Generic Linux input tool)
+#[cfg(target_os = "linux")]
+fn is_ydotool_available() -> bool {
+    Command::new("which")
+        .arg("ydotool")
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
@@ -204,6 +224,24 @@ fn type_text_via_dotool(text: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Type text directly via ydotool.
+#[cfg(target_os = "linux")]
+fn type_text_via_ydotool(text: &str) -> Result<(), String> {
+    let output = Command::new("ydotool")
+        .arg("type")
+        .arg("--")
+        .arg(text)
+        .output()
+        .map_err(|e| format!("Failed to execute ydotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ydotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
 /// Send a key combination (e.g., Ctrl+V) via wtype on Wayland.
 #[cfg(target_os = "linux")]
 fn send_key_combo_via_wtype(paste_method: &PasteMethod) -> Result<(), String> {
@@ -245,6 +283,30 @@ fn send_key_combo_via_dotool(paste_method: &PasteMethod) -> Result<(), String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("dotool failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+/// Send a key combination (e.g., Ctrl+V) via ydotool.
+/// Uses explicit key codes and up/down states for maximum compatibility.
+#[cfg(target_os = "linux")]
+fn send_key_combo_via_ydotool(paste_method: &PasteMethod) -> Result<(), String> {
+    let args: Vec<&str> = match paste_method {
+        PasteMethod::CtrlV => vec!["key", "29:1", "47:1", "47:0", "29:0"],
+        PasteMethod::ShiftInsert => vec!["key", "42:1", "110:1", "110:0", "42:0"],
+        PasteMethod::CtrlShiftV => vec!["key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0"],
+        _ => return Err("Unsupported paste method".into()),
+    };
+
+    let output = Command::new("ydotool")
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to execute ydotool: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ydotool failed: {}", stderr));
     }
 
     Ok(())
